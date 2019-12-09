@@ -624,6 +624,24 @@ var _ = Describe("Statefulset Desirer", func() {
 			})
 		})
 
+		FContext("and pods needs too much resources", func() {
+			Context("and the cluster has autoscaler", func() {
+				BeforeEach(func() {
+					eventLister.ListReturns(&corev1.EventList{
+						corev1.Event{
+							Reason:  "NotTriggerScaleUp",
+							Message: "pod didn't trigger scale-up (it wouldn't fit if a new node is added): 1 Insufficient memory",
+						},
+					}, nil)
+				})
+
+				It("returns insufficient memory response", func() {
+					_, err := statefulSetDesirer.GetInstances(opi.LRPIdentifier{})
+					Expect(err).To(Equal(opi.InsufficientMemoryError))
+				})
+			})
+		})
+
 		Context("and the StatefulSet was deleted/stopped", func() {
 
 			It("should return a default value", func() {
