@@ -11,13 +11,15 @@ import (
 
 const (
 	//Environment Variable Names
-	EnvDownloadURL        = "DOWNLOAD_URL"
-	EnvBuildpacks         = "BUILDPACKS"
-	EnvDropletUploadURL   = "DROPLET_UPLOAD_URL"
-	EnvAppID              = "APP_ID"
-	EnvStagingGUID        = "STAGING_GUID"
-	EnvCompletionCallback = "COMPLETION_CALLBACK"
-	EnvEiriniAddress      = "EIRINI_ADDRESS"
+	EnvDownloadURL               = "DOWNLOAD_URL"
+	EnvBuildpacks                = "BUILDPACKS"
+	EnvDropletUploadURL          = "DROPLET_UPLOAD_URL"
+	EnvAppID                     = "APP_ID"
+	EnvStagingGUID               = "STAGING_GUID"
+	EnvCompletionCallback        = "COMPLETION_CALLBACK"
+	EnvEiriniAddress             = "EIRINI_ADDRESS"
+	EnvBuildpackCacheUploadURI   = "BUILDPACK_CACHE_UPLOAD_URI"
+	EnvBuildpackCacheDownloadURI = "BUILDPACK_CACHE_DOWNLOAD_URI"
 
 	EnvPodName              = "POD_NAME"
 	EnvCFInstanceIP         = "CF_INSTANCE_IP"

@@ -62,13 +62,15 @@ func (s *Stager) createStagingTask(stagingGUID string, request cf.StagingRequest
 	}
 
 	eiriniEnv := map[string]string{
-		eirini.EnvDownloadURL:        lifecycleData.AppBitsDownloadURI,
-		eirini.EnvDropletUploadURL:   lifecycleData.DropletUploadURI,
-		eirini.EnvBuildpacks:         string(buildpacksJSON),
-		eirini.EnvAppID:              request.AppGUID,
-		eirini.EnvStagingGUID:        stagingGUID,
-		eirini.EnvCompletionCallback: request.CompletionCallback,
-		eirini.EnvEiriniAddress:      s.Config.EiriniAddress,
+		eirini.EnvDownloadURL:               lifecycleData.AppBitsDownloadURI,
+		eirini.EnvDropletUploadURL:          lifecycleData.DropletUploadURI,
+		eirini.EnvBuildpacks:                string(buildpacksJSON),
+		eirini.EnvAppID:                     request.AppGUID,
+		eirini.EnvStagingGUID:               stagingGUID,
+		eirini.EnvCompletionCallback:        request.CompletionCallback,
+		eirini.EnvEiriniAddress:             s.Config.EiriniAddress,
+		eirini.EnvBuildpackCacheUploadURI:   request.BuildpackCacheUploadURI,
+		eirini.EnvBuildpackCacheDownloadURI: request.BuildpackCacheDownloadURI,
 	}
 
 	stagingEnv := mergeEnvVriables(eiriniEnv, request.Environment)
