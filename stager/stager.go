@@ -62,6 +62,7 @@ func (s *Stager) createStagingTask(stagingGUID string, request cf.StagingRequest
 	}
 
 	eiriniEnv := map[string]string{
+		"TMPDIR":                            "/buildpack/tmp",
 		eirini.EnvDownloadURL:               lifecycleData.AppBitsDownloadURI,
 		eirini.EnvDropletUploadURL:          lifecycleData.DropletUploadURI,
 		eirini.EnvBuildpacks:                string(buildpacksJSON),

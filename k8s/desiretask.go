@@ -81,7 +81,7 @@ func (d *TaskDesirer) toStagingJob(task *opi.StagingTask) *batch.Job {
 	outputVolume, outputVolumeMount := getVolume(eirini.RecipeOutputName, eirini.RecipeOutputLocation)
 	buildpacksVolume, buildpacksVolumeMount := getVolume(eirini.RecipeBuildPacksName, eirini.RecipeBuildPacksDir)
 	workspaceVolume, workspaceVolumeMount := getVolume(eirini.RecipeWorkspaceName, eirini.RecipeWorkspaceDir)
-	buildpackCacheVolume, buildpackCacheVolumeMount := getVolume("buildpack-cache", "/buildpack-cache")
+	buildpackCacheVolume, buildpackCacheVolumeMount := getVolume("buildpack-cache", "/buildpack")
 
 	var downloaderVolumeMounts, executorVolumeMounts, uploaderVolumeMounts []v1.VolumeMount
 
