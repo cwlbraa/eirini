@@ -76,7 +76,9 @@ type Task struct {
 	AppName   string
 	AppGUID   string
 	OrgName   string
+	OrgGUID   string
 	SpaceName string
+	SpaceGUID string
 	MemoryMB  int64
 	DiskMB    int64
 	CPUWeight uint8
@@ -84,6 +86,7 @@ type Task struct {
 
 type StagingTask struct {
 	*Task
+	StagingGUID     string
 	DownloaderImage string
 	UploaderImage   string
 	ExecutorImage   string
