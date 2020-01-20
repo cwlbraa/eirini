@@ -129,15 +129,10 @@ func (d *TaskDesirer) toStagingJob(task *opi.StagingTask) *batch.Job {
 	volumes := []v1.Volume{secretsVolume, outputVolume, buildpacksVolume, workspaceVolume}
 	job.Spec.Template.Spec.Volumes = volumes
 
-	job.Annotations = map[string]string{
-		AnnotationAppName:     task.AppName,
-		AnnotationAppID:       task.AppGUID,
-		AnnotationOrgName:     task.OrgName,
-		AnnotationOrgGUID:     task.OrgGUID,
-		AnnotationSpaceName:   task.SpaceName,
-		AnnotationSpaceGUID:   task.SpaceGUID,
-		AnnotationStagingGUID: task.StagingGUID,
-	}
+	job.Annotations[AnnotationStagingGUID] = task.StagingGUID
+
+	job.Labels[LabelStagingGUID] = task.StagingGUID
+	job.Spec.Template.Labels[LabelStagingGUID] = task.StagingGUID
 
 	return job
 }
@@ -214,12 +209,21 @@ func toJob(task *opi.Task) *batch.Job {
 	job.Name = task.Env[eirini.EnvStagingGUID]
 
 	labels := map[string]string{
+		LabelAppGUID:    task.AppGUID,
 		LabelGUID:       task.Env[eirini.EnvAppID],
 		LabelSourceType: stagingSourceType,
 	}
 
 	job.Spec.Template.Labels = labels
 	job.Labels = labels
+	job.Annotations = map[string]string{
+		AnnotationAppName:   task.AppName,
+		AnnotationAppID:     task.AppGUID,
+		AnnotationOrgName:   task.OrgName,
+		AnnotationOrgGUID:   task.OrgGUID,
+		AnnotationSpaceName: task.SpaceName,
+		AnnotationSpaceGUID: task.SpaceGUID,
+	}
 
 	return job
 }

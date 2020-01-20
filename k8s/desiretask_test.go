@@ -22,27 +22,24 @@ var _ = Describe("Desiretask", func() {
 		Namespace       = "tests"
 		Image           = "docker.png"
 		CertsSecretName = "secret-certs"
+		stagingGUID     = "staging-123"
 	)
 
 	var (
-		task       *opi.Task
-		desirer    opi.TaskDesirer
-		fakeClient kubernetes.Interface
-		err        error
+		task         *opi.Task
+		desirer      opi.TaskDesirer
+		fakeClient   kubernetes.Interface
+		job          *batch.Job
+		err          error
+		getErr       error
+		commonLabels map[string]string
 	)
 
 	assertGeneralSpec := func(job *batch.Job) {
-
-		labels := map[string]string{
-			LabelGUID:       "env-app-id",
-			LabelSourceType: "STG",
-		}
 		automountServiceAccountToken := false
 		Expect(job.Name).To(Equal("the-stage-is-yours"))
 		Expect(job.Spec.ActiveDeadlineSeconds).To(Equal(int64ptr(900)))
 		Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
-		Expect(job.Spec.Template.Labels).To(Equal(labels))
-		Expect(job.Labels).To(Equal(labels))
 		Expect(job.Spec.Template.Spec.AutomountServiceAccountToken).To(Equal(&automountServiceAccountToken))
 	}
 
@@ -86,7 +83,13 @@ var _ = Describe("Desiretask", func() {
 	BeforeEach(func() {
 		fakeClient = fake.NewSimpleClientset()
 		task = &opi.Task{
-			Image: Image,
+			Image:     Image,
+			AppName:   "my-app",
+			AppGUID:   "my-app-guid",
+			OrgName:   "my-org",
+			SpaceName: "my-space",
+			SpaceGUID: "space-id",
+			OrgGUID:   "org-id",
 			Env: map[string]string{
 				eirini.EnvDownloadURL:        "example.com/download",
 				eirini.EnvDropletUploadURL:   "example.com/upload",
@@ -95,11 +98,20 @@ var _ = Describe("Desiretask", func() {
 				eirini.EnvCompletionCallback: "example.com/call/me/maybe",
 				eirini.EnvEiriniAddress:      "http://opi.cf.internal",
 			},
+			MemoryMB:  1,
+			CPUWeight: 2,
+			DiskMB:    3,
 		}
 		desirer = &TaskDesirer{
 			Namespace:       Namespace,
 			CertsSecretName: CertsSecretName,
 			Client:          fakeClient,
+		}
+
+		commonLabels = map[string]string{
+			LabelAppGUID:    "my-app-guid",
+			LabelGUID:       "env-app-id",
+			LabelSourceType: "STG",
 		}
 	})
 
@@ -107,17 +119,33 @@ var _ = Describe("Desiretask", func() {
 
 		BeforeEach(func() {
 			Expect(desirer.Desire(task)).To(Succeed())
+
+			job, getErr = fakeClient.BatchV1().Jobs(Namespace).Get("the-stage-is-yours", meta_v1.GetOptions{})
+			Expect(getErr).ToNot(HaveOccurred())
+
 		})
 
 		It("should desire the task", func() {
-			job, getErr := fakeClient.BatchV1().Jobs(Namespace).Get("the-stage-is-yours", meta_v1.GetOptions{})
-			Expect(getErr).ToNot(HaveOccurred())
-
 			assertGeneralSpec(job)
 
 			containers := job.Spec.Template.Spec.Containers
 			Expect(containers).To(HaveLen(1))
 			assertContainer(containers[0], "opi-task")
+		})
+
+		DescribeTable("Annotations", func(key, value string) {
+			Expect(job.Annotations[key]).To(Equal(value))
+		},
+			Entry("AppName", AnnotationAppName, "my-app"),
+			Entry("AppGUID", AnnotationAppID, "my-app-guid"),
+			Entry("OrgName", AnnotationOrgName, "my-org"),
+			Entry("OrgName", AnnotationOrgGUID, "org-id"),
+			Entry("SpaceName", AnnotationSpaceName, "my-space"),
+			Entry("SpaceGUID", AnnotationSpaceGUID, "space-id"),
+		)
+
+		It("should contain the expected labels", func() {
+			Expect(job.Labels).To(Equal(commonLabels))
 		})
 
 		Context("and the job already exists", func() {
@@ -132,8 +160,6 @@ var _ = Describe("Desiretask", func() {
 
 		var (
 			stagingTask *opi.StagingTask
-			getErr      error
-			job         *batch.Job
 		)
 
 		assertVolumes := func(job *batch.Job) {
@@ -211,26 +237,8 @@ var _ = Describe("Desiretask", func() {
 				DownloaderImage: Image,
 				ExecutorImage:   Image,
 				UploaderImage:   Image,
-				StagingGUID:     "staging-123",
-				Task: &opi.Task{
-					AppName:   "my-app",
-					AppGUID:   "my-app-guid",
-					OrgName:   "my-org",
-					SpaceName: "my-space",
-					SpaceGUID: "space-id",
-					OrgGUID:   "org-id",
-					Env: map[string]string{
-						eirini.EnvDownloadURL:        "example.com/download",
-						eirini.EnvDropletUploadURL:   "example.com/upload",
-						eirini.EnvAppID:              "env-app-id",
-						eirini.EnvStagingGUID:        "the-stage-is-yours",
-						eirini.EnvCompletionCallback: "example.com/call/me/maybe",
-						eirini.EnvEiriniAddress:      "http://opi.cf.internal",
-					},
-					MemoryMB:  1,
-					CPUWeight: 2,
-					DiskMB:    3,
-				},
+				StagingGUID:     stagingGUID,
+				Task:            task,
 			}
 
 			Expect(desirer.DesireStaging(stagingTask)).To(Succeed())
@@ -262,17 +270,10 @@ var _ = Describe("Desiretask", func() {
 
 		})
 
-		DescribeTable("Annotations", func(key, value string) {
-			Expect(job.Annotations[key]).To(Equal(value))
-		},
-			Entry("AppName", AnnotationAppName, "my-app"),
-			Entry("AppGUID", AnnotationAppID, "my-app-guid"),
-			Entry("OrgName", AnnotationOrgName, "my-org"),
-			Entry("OrgName", AnnotationOrgGUID, "org-id"),
-			Entry("SpaceName", AnnotationSpaceName, "my-space"),
-			Entry("SpaceGUID", AnnotationSpaceGUID, "space-id"),
-			Entry("Staging GUID", AnnotationStagingGUID, "staging-123"),
-		)
+		It("should contain the expected labels", func() {
+			commonLabels[LabelStagingGUID] = stagingGUID
+			Expect(job.Labels).To(Equal(commonLabels))
+		})
 
 		Context("When the staging task already exists", func() {
 			It("should return an error", func() {
