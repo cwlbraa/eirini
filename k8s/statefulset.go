@@ -32,10 +32,14 @@ const (
 	AnnotationAppID            = "cloudfoundry.org/application_id"
 	AnnotationSpaceName        = "cloudfoundry.org/space_name"
 	AnnotationOrgName          = "cloudfoundry.org/org_name"
+	AnnotationOrgGUID          = "cloudfoundry.org/org_guid"
+	AnnotationSpaceGUID        = "cloudfoundry.org/space_guid"
 	AnnotationLastUpdated      = "cloudfoundry.org/last_updated"
 	AnnotationProcessGUID      = "cloudfoundry.org/process_guid"
 	AnnotationRegisteredRoutes = "cloudfoundry.org/routes"
 	AnnotationOriginalRequest  = "cloudfoundry.org/original_request"
+
+	AnnotationStagingGUID = "cloudfoundry.org/staging_guid"
 
 	LabelGUID        = "cloudfoundry.org/guid"
 	LabelVersion     = "cloudfoundry.org/version"

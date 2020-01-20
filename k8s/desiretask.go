@@ -129,6 +129,16 @@ func (d *TaskDesirer) toStagingJob(task *opi.StagingTask) *batch.Job {
 	volumes := []v1.Volume{secretsVolume, outputVolume, buildpacksVolume, workspaceVolume}
 	job.Spec.Template.Spec.Volumes = volumes
 
+	job.Annotations = map[string]string{
+		AnnotationAppName:     task.AppName,
+		AnnotationAppID:       task.AppGUID,
+		AnnotationOrgName:     task.OrgName,
+		AnnotationOrgGUID:     task.OrgGUID,
+		AnnotationSpaceName:   task.SpaceName,
+		AnnotationSpaceGUID:   task.SpaceGUID,
+		AnnotationStagingGUID: task.StagingGUID,
+	}
+
 	return job
 }
 

@@ -5,6 +5,7 @@ import (
 	. "code.cloudfoundry.org/eirini/k8s"
 	"code.cloudfoundry.org/eirini/opi"
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 	batch "k8s.io/api/batch/v1"
@@ -129,7 +130,11 @@ var _ = Describe("Desiretask", func() {
 
 	Context("When desiring a staging task", func() {
 
-		var stagingTask *opi.StagingTask
+		var (
+			stagingTask *opi.StagingTask
+			getErr      error
+			job         *batch.Job
+		)
 
 		assertVolumes := func(job *batch.Job) {
 			Expect(job.Spec.Template.Spec.Volumes).To(HaveLen(4))
@@ -206,7 +211,14 @@ var _ = Describe("Desiretask", func() {
 				DownloaderImage: Image,
 				ExecutorImage:   Image,
 				UploaderImage:   Image,
+				StagingGUID:     "staging-123",
 				Task: &opi.Task{
+					AppName:   "my-app",
+					AppGUID:   "my-app-guid",
+					OrgName:   "my-org",
+					SpaceName: "my-space",
+					SpaceGUID: "space-id",
+					OrgGUID:   "org-id",
 					Env: map[string]string{
 						eirini.EnvDownloadURL:        "example.com/download",
 						eirini.EnvDropletUploadURL:   "example.com/upload",
@@ -224,9 +236,12 @@ var _ = Describe("Desiretask", func() {
 			Expect(desirer.DesireStaging(stagingTask)).To(Succeed())
 		})
 
-		It("should desire the staging task", func() {
-			job, getErr := fakeClient.BatchV1().Jobs(Namespace).Get("the-stage-is-yours", meta_v1.GetOptions{})
+		JustBeforeEach(func() {
+			job, getErr = fakeClient.BatchV1().Jobs(Namespace).Get("the-stage-is-yours", meta_v1.GetOptions{})
 			Expect(getErr).ToNot(HaveOccurred())
+		})
+
+		It("should desire the staging task", func() {
 
 			assertGeneralSpec(job)
 
@@ -244,7 +259,20 @@ var _ = Describe("Desiretask", func() {
 			)
 			assertContainer(containers[0], "opi-task-uploader")
 			assertStagingSpec(job)
+
 		})
+
+		DescribeTable("Annotations", func(key, value string) {
+			Expect(job.Annotations[key]).To(Equal(value))
+		},
+			Entry("AppName", AnnotationAppName, "my-app"),
+			Entry("AppGUID", AnnotationAppID, "my-app-guid"),
+			Entry("OrgName", AnnotationOrgName, "my-org"),
+			Entry("OrgName", AnnotationOrgGUID, "org-id"),
+			Entry("SpaceName", AnnotationSpaceName, "my-space"),
+			Entry("SpaceGUID", AnnotationSpaceGUID, "space-id"),
+			Entry("Staging GUID", AnnotationStagingGUID, "staging-123"),
+		)
 
 		Context("When the staging task already exists", func() {
 			It("should return an error", func() {
