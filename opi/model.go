@@ -30,7 +30,9 @@ type LRP struct {
 	AppName                string
 	AppGUID                string
 	OrgName                string
+	OrgGUID                string
 	SpaceName              string
+	SpaceGUID              string
 	Image                  string
 	Command                []string
 	Env                    map[string]string

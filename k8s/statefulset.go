@@ -390,6 +390,7 @@ func (m *StatefulSetDesirer) toStatefulSet(lrp *opi.LRP) *appsv1.StatefulSet {
 
 	statefulSet.Annotations = map[string]string{
 		AnnotationSpaceName:        lrp.SpaceName,
+		AnnotationSpaceGUID:        lrp.SpaceGUID,
 		AnnotationOriginalRequest:  lrp.LRP,
 		AnnotationRegisteredRoutes: lrp.AppURIs,
 		AnnotationAppID:            lrp.AppGUID,
@@ -399,6 +400,7 @@ func (m *StatefulSetDesirer) toStatefulSet(lrp *opi.LRP) *appsv1.StatefulSet {
 		AnnotationAppUris:          lrp.AppURIs,
 		AnnotationAppName:          lrp.AppName,
 		AnnotationOrgName:          lrp.OrgName,
+		AnnotationOrgGUID:          lrp.OrgGUID,
 	}
 
 	return statefulSet
