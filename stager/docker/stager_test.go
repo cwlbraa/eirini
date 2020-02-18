@@ -8,6 +8,7 @@ import (
 	"code.cloudfoundry.org/eirini/stager/docker"
 	"code.cloudfoundry.org/eirini/stager/docker/dockerfakes"
 	"code.cloudfoundry.org/eirini/stager/stagerfakes"
+	"code.cloudfoundry.org/lager/lagertest"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -42,13 +43,14 @@ var _ = Describe("DockerStager", func() {
 
 			fetcher.Returns(&v1.ImageConfig{
 				ExposedPorts: map[string]struct{}{
-					"8888/tcp": struct{}{},
+					"8888/tcp": {},
 				},
 			}, nil)
 		})
 
 		JustBeforeEach(func() {
 			stager = docker.Stager{
+				Logger:               lagertest.NewTestLogger(""),
 				ImageMetadataFetcher: fetcher.Spy,
 				StagingCompleter:     stagingCompleter,
 			}
@@ -189,7 +191,7 @@ var _ = Describe("DockerStager", func() {
 			BeforeEach(func() {
 				fetcher.Returns(&v1.ImageConfig{
 					ExposedPorts: map[string]struct{}{
-						"invalid-port-spec": struct{}{},
+						"invalid-port-spec": {},
 					},
 				}, nil)
 			})

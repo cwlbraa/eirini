@@ -7,6 +7,7 @@ import (
 	"code.cloudfoundry.org/bbs/models"
 	"code.cloudfoundry.org/eirini/models/cf"
 	"code.cloudfoundry.org/eirini/stager"
+	"code.cloudfoundry.org/lager"
 	"github.com/containers/image/types"
 	"github.com/docker/distribution/reference"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -21,6 +22,7 @@ func (f ImageMetadataFetcher) Fetch(dockerRef string, sysCtx types.SystemContext
 }
 
 type Stager struct {
+	Logger               lager.Logger
 	ImageMetadataFetcher ImageMetadataFetcher
 	StagingCompleter     stager.StagingCompleter
 }
@@ -62,16 +64,19 @@ func (s Stager) Stage(stagingGUID string, request cf.StagingRequest) error {
 
 	imageConfig, err := s.getImageConfig(request.Lifecycle.DockerLifecycle)
 	if err != nil {
+		s.Logger.Error("failed to get image config", err)
 		return s.respondWithFailure(taskCallbackResponse, errors.Wrap(err, "failed to get image config"))
 	}
 
 	ports, err := parseExposedPorts(imageConfig)
 	if err != nil {
+		s.Logger.Error("failed to parse exposed ports", err)
 		return s.respondWithFailure(taskCallbackResponse, errors.Wrap(err, "failed to parse exposed ports"))
 	}
 
 	stagingResult, err := buildStagingResult(request.Lifecycle.DockerLifecycle.Image, ports)
 	if err != nil {
+		s.Logger.Error("failed to build staging result", err)
 		return s.respondWithFailure(taskCallbackResponse, errors.Wrap(err, "failed to build staging result"))
 	}
 
@@ -112,10 +117,10 @@ func parseExposedPorts(imageConfig *v1.ImageConfig) ([]port, error) {
 	var (
 		portNum  uint
 		protocol string
-		ports    []port
 	)
 
-	for imagePort, _ := range imageConfig.ExposedPorts {
+	ports := make([]port, 0, len(imageConfig.ExposedPorts))
+	for imagePort := range imageConfig.ExposedPorts {
 		_, err := fmt.Sscanf(imagePort, "%d/%s", &portNum, &protocol)
 		if err != nil {
 			return []port{}, err

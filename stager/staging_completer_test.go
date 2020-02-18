@@ -56,7 +56,7 @@ var _ = Describe("StagingCompleter", func() {
 		stagingCompleter = &stager.CallbackStagingCompleter{
 			Logger:     logger,
 			HTTPClient: &http.Client{},
-			Retries:    3,
+			Retries:    retries,
 			Delay:      10 * time.Millisecond,
 		}
 		err = stagingCompleter.CompleteStaging(task)
@@ -139,7 +139,7 @@ var _ = Describe("StagingCompleter", func() {
 		})
 
 		It("should retry configured amount of times", func() {
-			Expect(server.ReceivedRequests()).To(HaveLen(3))
+			Expect(server.ReceivedRequests()).To(HaveLen(retries))
 		})
 	})
 })
