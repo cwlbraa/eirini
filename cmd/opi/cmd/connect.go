@@ -98,7 +98,8 @@ func initStager(clientset kubernetes.Interface, cfg *eirini.Config) eirini.Stage
 
 	stagerLogger := lager.NewLogger("stager")
 	stagerLogger.RegisterSink(lager.NewPrettySink(os.Stdout, lager.DEBUG))
-	return stager.New(taskDesirer, httpClient, stagerCfg, stagerLogger)
+	stagingCompleter := stager.NewCallbackStagingCompleter(stagerLogger, httpClient)
+	return stager.New(taskDesirer, stagingCompleter, stagerCfg, stagerLogger)
 }
 
 func initBifrost(clientset kubernetes.Interface, cfg *eirini.Config) eirini.Bifrost {

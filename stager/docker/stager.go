@@ -1,13 +1,16 @@
 package docker
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"code.cloudfoundry.org/bbs/models"
 	"code.cloudfoundry.org/eirini/models/cf"
+	"code.cloudfoundry.org/eirini/stager"
 	"github.com/containers/image/types"
 	"github.com/docker/distribution/reference"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 )
 
 //go:generate counterfeiter . ImageMetadataFetcher
@@ -19,22 +22,129 @@ func (f ImageMetadataFetcher) Fetch(dockerRef string, sysCtx types.SystemContext
 
 type Stager struct {
 	ImageMetadataFetcher ImageMetadataFetcher
+	StagingCompleter     stager.StagingCompleter
+}
+
+type StagingCallbackPayload struct {
+	Result StagingResult `json:"result"`
+}
+
+type StagingResult struct {
+	LifecycleType     string            `json:"lifecycle_type"`
+	LifecycleMetadata LifecycleMetadata `json:"lifecycle_metadata"`
+	ProcessTypes      ProcessTypes      `json:"process_types"`
+	ExecutionMetadata string            `json:"execution_metadata"`
+}
+
+type LifecycleMetadata struct {
+	DockerImage string `json:"docker_image"`
+}
+
+type ProcessTypes struct {
+	Web string `json:"web"`
+}
+
+type port struct {
+	Port     uint   `json:"Port"`
+	Protocol string `json:"Protocol"`
+}
+
+type executionMetadata struct {
+	Cmd   []string `json:"cmd"`
+	Ports []port   `json:"ports"`
 }
 
 func (s Stager) Stage(stagingGUID string, request cf.StagingRequest) error {
-	named, err := reference.ParseNormalizedNamed(request.Lifecycle.DockerLifecycle.Image)
+	imageConfig, err := s.getImageConfig(request.Lifecycle.DockerLifecycle)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get image config")
 	}
-	dockerRef := fmt.Sprintf("//%s", named.Name())
-	s.ImageMetadataFetcher.Fetch(dockerRef, types.SystemContext{})
 
-	// call fetchmetadata(d0ckerref)
-	// call CompleteStaging
+	ports, err := parseExposedPorts(imageConfig)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse exposed ports")
+	}
+
+	stagingResult, err := buildStagingResult(request.Lifecycle.DockerLifecycle.Image, ports)
+	if err != nil {
+		return errors.Wrap(err, "failed to build staging result")
+	}
+
+	s.CompleteStaging(&models.TaskCallbackResponse{
+		TaskGuid:   stagingGUID,
+		Annotation: fmt.Sprintf(`{"completion_callback": "%s"}`, request.CompletionCallback),
+		Result:     stagingResult,
+	})
 	return nil
 }
-func (s Stager) CompleteStaging(*models.TaskCallbackResponse) error {
-	// create CC response
-	// call CC
-	return nil
+
+func (s Stager) CompleteStaging(task *models.TaskCallbackResponse) error {
+	return s.StagingCompleter.CompleteStaging(task)
+}
+
+func (s Stager) getImageConfig(lifecycle *cf.StagingDockerLifecycle) (*v1.ImageConfig, error) {
+	named, err := reference.ParseNormalizedNamed(lifecycle.Image)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse image ref")
+	}
+	dockerRef := fmt.Sprintf("//%s", named.String())
+	imgMetadata, err := s.ImageMetadataFetcher.Fetch(dockerRef, types.SystemContext{
+		DockerAuthConfig: &types.DockerAuthConfig{
+			Username: lifecycle.RegistryUsername,
+			Password: lifecycle.RegistryPassword,
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch image metadata")
+	}
+
+	return imgMetadata, nil
+}
+
+func parseExposedPorts(imageConfig *v1.ImageConfig) ([]port, error) {
+	var (
+		portNum  uint
+		protocol string
+		ports    []port
+	)
+
+	for imagePort, _ := range imageConfig.ExposedPorts {
+		_, err := fmt.Sscanf(imagePort, "%d/%s", &portNum, &protocol)
+		if err != nil {
+			return []port{}, err
+		}
+		ports = append(ports, port{
+			Port:     portNum,
+			Protocol: protocol,
+		})
+	}
+	return ports, nil
+}
+
+func buildStagingResult(image string, ports []port) (string, error) {
+	executionMetadataJSON, err := json.Marshal(executionMetadata{
+		Cmd:   []string{},
+		Ports: ports,
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse execution metadata")
+	}
+
+	payload := StagingCallbackPayload{
+		Result: StagingResult{
+			LifecycleType: "docker",
+			LifecycleMetadata: LifecycleMetadata{
+				DockerImage: image,
+			},
+			ProcessTypes:      ProcessTypes{Web: ""},
+			ExecutionMetadata: string(executionMetadataJSON),
+		},
+	}
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to build payload json")
+	}
+
+	return string(payloadJSON), nil
 }

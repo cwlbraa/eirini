@@ -27,6 +27,7 @@ require (
 	code.cloudfoundry.org/tps v0.0.0-20190724214151-ce1ef3913d8e
 	code.cloudfoundry.org/urljoiner v0.0.0-20170223060717-5cabba6c0a50 // indirect
 	github.com/Azure/go-autorest/autorest v0.9.5 // indirect
+	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/containers/image v3.0.2+incompatible
 	github.com/deckarep/golang-set v1.7.1
 	github.com/docker/distribution v2.7.1+incompatible
