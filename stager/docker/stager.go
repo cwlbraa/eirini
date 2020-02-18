@@ -55,27 +55,34 @@ type executionMetadata struct {
 }
 
 func (s Stager) Stage(stagingGUID string, request cf.StagingRequest) error {
+	taskCallbackResponse := &models.TaskCallbackResponse{
+		TaskGuid:   stagingGUID,
+		Annotation: fmt.Sprintf(`{"completion_callback": "%s"}`, request.CompletionCallback),
+	}
+
 	imageConfig, err := s.getImageConfig(request.Lifecycle.DockerLifecycle)
 	if err != nil {
-		return errors.Wrap(err, "failed to get image config")
+		return s.respondWithFailure(taskCallbackResponse, errors.Wrap(err, "failed to get image config"))
 	}
 
 	ports, err := parseExposedPorts(imageConfig)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse exposed ports")
+		return s.respondWithFailure(taskCallbackResponse, errors.Wrap(err, "failed to parse exposed ports"))
 	}
 
 	stagingResult, err := buildStagingResult(request.Lifecycle.DockerLifecycle.Image, ports)
 	if err != nil {
-		return errors.Wrap(err, "failed to build staging result")
+		return s.respondWithFailure(taskCallbackResponse, errors.Wrap(err, "failed to build staging result"))
 	}
 
-	s.CompleteStaging(&models.TaskCallbackResponse{
-		TaskGuid:   stagingGUID,
-		Annotation: fmt.Sprintf(`{"completion_callback": "%s"}`, request.CompletionCallback),
-		Result:     stagingResult,
-	})
-	return nil
+	taskCallbackResponse.Result = stagingResult
+	return s.CompleteStaging(taskCallbackResponse)
+}
+
+func (s Stager) respondWithFailure(taskCallbackResponse *models.TaskCallbackResponse, err error) error {
+	taskCallbackResponse.Failed = true
+	taskCallbackResponse.FailureReason = err.Error()
+	return s.CompleteStaging(taskCallbackResponse)
 }
 
 func (s Stager) CompleteStaging(task *models.TaskCallbackResponse) error {

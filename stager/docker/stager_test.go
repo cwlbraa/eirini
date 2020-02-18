@@ -125,13 +125,38 @@ var _ = Describe("DockerStager", func() {
 			})
 		})
 
+		Context("when the staging completion callback fails", func() {
+			BeforeEach(func() {
+				stagingCompleter.CompleteStagingReturns(errors.New("callback failed"))
+			})
+
+			It("should fail with the right error", func() {
+				Expect(stagingErr).To(MatchError("callback failed"))
+			})
+		})
+
 		Context("when the image ref is invalid", func() {
 			BeforeEach(func() {
 				stagingRequest.Lifecycle.DockerLifecycle.Image = "this is invalid"
 			})
 
 			It("should fail with the right error", func() {
-				Expect(stagingErr).To(MatchError(ContainSubstring("failed to parse image ref")))
+				Expect(stagingErr).ToNot(HaveOccurred())
+				Expect(stagingCompleter.CompleteStagingCallCount()).To(Equal(1))
+
+				taskCallbackResponse := stagingCompleter.CompleteStagingArgsForCall(0)
+				Expect(taskCallbackResponse.Failed).To(BeTrue())
+				Expect(taskCallbackResponse.FailureReason).To(ContainSubstring("failed to parse image ref"))
+			})
+
+			Context("when the staging completion callback fails", func() {
+				BeforeEach(func() {
+					stagingCompleter.CompleteStagingReturns(errors.New("callback failed"))
+				})
+
+				It("should fail with the right error", func() {
+					Expect(stagingErr).To(MatchError("callback failed"))
+				})
 			})
 		})
 
@@ -141,10 +166,53 @@ var _ = Describe("DockerStager", func() {
 			})
 
 			It("should fail with the right error", func() {
-				Expect(stagingErr).To(MatchError(ContainSubstring("failed to fetch image metadata")))
+				Expect(stagingErr).ToNot(HaveOccurred())
+				Expect(stagingCompleter.CompleteStagingCallCount()).To(Equal(1))
+
+				taskCallbackResponse := stagingCompleter.CompleteStagingArgsForCall(0)
+				Expect(taskCallbackResponse.Failed).To(BeTrue())
+				Expect(taskCallbackResponse.FailureReason).To(ContainSubstring("failed to fetch image metadata"))
+			})
+
+			Context("when the staging completion callback fails", func() {
+				BeforeEach(func() {
+					stagingCompleter.CompleteStagingReturns(errors.New("callback failed"))
+				})
+
+				It("should fail with the right error", func() {
+					Expect(stagingErr).To(MatchError("callback failed"))
+				})
 			})
 		})
 
+		Context("when exposed ports are wrongly formatted in the image metadata", func() {
+			BeforeEach(func() {
+				fetcher.Returns(&v1.ImageConfig{
+					ExposedPorts: map[string]struct{}{
+						"invalid-port-spec": struct{}{},
+					},
+				}, nil)
+			})
+
+			It("should respond to the callback url with failure", func() {
+				Expect(stagingErr).ToNot(HaveOccurred())
+				Expect(stagingCompleter.CompleteStagingCallCount()).To(Equal(1))
+
+				taskCallbackResponse := stagingCompleter.CompleteStagingArgsForCall(0)
+				Expect(taskCallbackResponse.Failed).To(BeTrue())
+				Expect(taskCallbackResponse.FailureReason).To(ContainSubstring("failed to parse exposed ports"))
+			})
+		})
+
+		Context("when the staging completion callback fails", func() {
+			BeforeEach(func() {
+				stagingCompleter.CompleteStagingReturns(errors.New("callback failed"))
+			})
+
+			It("should fail with the right error", func() {
+				Expect(stagingErr).To(MatchError("callback failed"))
+			})
+		})
 	})
 
 })
