@@ -27,10 +27,6 @@ type Stager struct {
 	StagingCompleter     stager.StagingCompleter
 }
 
-type StagingCallbackPayload struct {
-	Result StagingResult `json:"result"`
-}
-
 type StagingResult struct {
 	LifecycleType     string            `json:"lifecycle_type"`
 	LifecycleMetadata LifecycleMetadata `json:"lifecycle_metadata"`
@@ -142,15 +138,13 @@ func buildStagingResult(image string, ports []port) (string, error) {
 		return "", errors.Wrap(err, "failed to parse execution metadata")
 	}
 
-	payload := StagingCallbackPayload{
-		Result: StagingResult{
-			LifecycleType: "docker",
-			LifecycleMetadata: LifecycleMetadata{
-				DockerImage: image,
-			},
-			ProcessTypes:      ProcessTypes{Web: ""},
-			ExecutionMetadata: string(executionMetadataJSON),
+	payload := StagingResult{
+		LifecycleType: "docker",
+		LifecycleMetadata: LifecycleMetadata{
+			DockerImage: image,
 		},
+		ProcessTypes:      ProcessTypes{Web: ""},
+		ExecutionMetadata: string(executionMetadataJSON),
 	}
 
 	payloadJSON, err := json.Marshal(payload)

@@ -76,13 +76,14 @@ var _ = Describe("DockerStager", func() {
 			Expect(task.Failed).To(BeFalse())
 			Expect(task.Annotation).To(Equal(`{"completion_callback": "the-completion-callback/call/me"}`))
 
-			var payload docker.StagingCallbackPayload
+			var payload docker.StagingResult
 			Expect(json.Unmarshal([]byte(task.Result), &payload)).To(Succeed())
 
-			Expect(payload.Result.LifecycleType).To(Equal("docker"))
-			Expect(payload.Result.LifecycleMetadata.DockerImage).To(Equal("eirini/some-app:some-tag"))
-			Expect(payload.Result.ProcessTypes.Web).To(BeEmpty())
-			Expect(payload.Result.ExecutionMetadata).To(Equal(`{"cmd":[],"ports":[{"Port":8888,"Protocol":"tcp"}]}`))
+			Expect(payload.LifecycleType).To(Equal("docker"))
+			Expect(payload.LifecycleMetadata.DockerImage).To(Equal("eirini/some-app:some-tag"))
+			Expect(payload.ProcessTypes.Web).To(BeEmpty())
+			Expect(payload.ExecutionMetadata).To(Equal(`{"cmd":[],"ports":[{"Port":8888,"Protocol":"tcp"}]}`))
+
 		})
 
 		Context("when the image is from the standard library", func() {
