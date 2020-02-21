@@ -1,0 +1,76 @@
+#!/bin/bash
+
+set -euo pipefail
+
+IFS=$'\n\t'
+
+readonly USAGE="Usage: patch-me-if-you-can.sh -c <cluster-name> [ -s ] [ <component-name> ... ]"
+readonly SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+readonly EIRINI_BASEDIR=$(realpath "$SCRIPT_DIR/..")
+readonly EIRINI_RELEASE_BASEDIR=$(realpath "$SCRIPT_DIR/../../eirini-release")
+
+
+main() {
+  if [ "$#" == "0" ]; then
+    echo "$USAGE"
+    exit 1
+  fi
+
+  local cluster_name skip_docker_build="false"
+  while getopts ":c:s" opt; do
+    case ${opt} in
+      c )
+        cluster_name=$OPTARG
+        ;;
+      s )
+        skip_docker_build="true"
+        ;;
+      \? )
+        echo "Invalid option: $OPTARG" 1>&2
+        echo "$USAGE"
+        ;;
+      : )
+        echo "Invalid option: $OPTARG requires an argument" 1>&2
+        echo "$USAGE"
+        ;;
+    esac
+  done
+  shift $((OPTIND -1))
+
+  if [ -z "$cluster_name" ]; then
+    echo "Cluster name not provided"
+    echo "$USAGE"
+    exit 1
+  fi
+
+  if [ "$cluster_name" != "$(current_cluster_name)" ]; then
+    echo "Your current cluster is $(current_cluster_name), but you want to update $cluster_name. Please target $cluster_name"
+    echo eval "\$(ibmcloud ks cluster config --export $cluster_name)"
+    exit 1
+  fi
+
+  helm_upgrade "$cluster_name"
+}
+
+helm_upgrade() {
+  local cluster_name
+  cluster_name=$1
+
+  local secret ca_cert secret_name bits_tls_crt bits_tls_key
+  secret=$(kubectl get pods --namespace uaa -o jsonpath='{.items[?(.metadata.name=="uaa-0")].spec.containers[?(.name=="uaa")].env[?(.name=="INTERNAL_CA_CERT")].valueFrom.secretKeyRef.name}')
+  ca_cert=$(kubectl get secret "$secret" --namespace uaa -o jsonpath="{.data['internal-ca-cert']}" | base64 --decode -)
+
+  secret_name=$(kubectl get secrets | grep "$(current_cluster_name)" | cut -d ' ' -f 1)
+  bits_tls_crt=$(kubectl get secret "$secret_name" --namespace default -o jsonpath="{.data['tls\.crt']}" | base64 --decode -)
+  bits_tls_key=$(kubectl get secret "$secret_name" --namespace default -o jsonpath="{.data['tls\.key']}" | base64 --decode -)
+
+  pushd "$EIRINI_BASEDIR"
+    skaffold deploy --images eirini/opi:1.3.0-6-gedf3f7cf-dirty
+  popd
+}
+
+current_cluster_name() {
+  kubectl config current-context | cut -d / -f 1
+}
+
+main "$@"

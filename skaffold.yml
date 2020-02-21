@@ -1,0 +1,27 @@
+apiVersion: skaffold/v2alpha3
+kind: Config
+metadata:
+  name: eirini
+build:
+  artifacts:
+  - image: eirini/opi
+    context: .
+    docker:
+      dockerfile: docker/opi/Dockerfile
+      buildArgs:
+        GIT_SHA: big-sha
+deploy:
+  helm:
+    releases:
+    - name: "scf"
+      namespace: "scf"
+      chartPath: "../eirini-release/helm/cf"
+      valuesFiles: 
+      - "../eirini-private-config/environments/kube-clusters/{{.cluster_name}}/scf-config-values.yaml"
+      skipBuildDependencies: true
+      values:
+        opi.image: eirini/opi
+      setValueTemplates:
+        secrets.UAA_CA_CERT: "{{.ca_cert}}"
+        bits.secrets.BITS_TLS_KEY: "{{.bits_tls_key}}"
+        bits.secrets.BITS_TLS_CRT: "{{.bits_tls_crt}}"
