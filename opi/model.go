@@ -49,6 +49,7 @@ type LRP struct {
 	AppURIs                string
 	LastUpdated            string
 	UserDefinedAnnotations map[string]string
+	RunsAsRoot             bool
 }
 
 type PrivateRegistry struct {

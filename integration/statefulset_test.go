@@ -2,10 +2,10 @@ package statefulsets_test
 
 import (
 	"fmt"
-	"time"
 
 	"code.cloudfoundry.org/eirini/integration/util"
 	. "code.cloudfoundry.org/eirini/k8s"
+	"code.cloudfoundry.org/eirini/k8s/utils"
 	"code.cloudfoundry.org/eirini/opi"
 	"code.cloudfoundry.org/lager/lagertest"
 
@@ -45,6 +45,8 @@ var _ = Describe("StatefulSet Manager", func() {
 			namespace,
 			"registry-secret",
 			"rootfsversion",
+			"default",
+			"default",
 			logger,
 		)
 	})
@@ -203,7 +205,6 @@ var _ = Describe("StatefulSet Manager", func() {
 			FIt("should start all the pods", func() {
 				var podNames []string
 
-				time.Sleep(30 * time.Second)
 				Eventually(func() []string {
 					podNames = podNamesFromPods(listPods(odinLRP.LRPIdentifier))
 					return podNames
@@ -213,9 +214,10 @@ var _ = Describe("StatefulSet Manager", func() {
 					podIndex := i
 					Expect(podNames[podIndex]).To(ContainSubstring(odinLRP.GUID))
 
-					Eventually(func() corev1.PodPhase {
-						return getPodPhase(podIndex, odinLRP.LRPIdentifier)
-					}, timeout).Should(Equal(corev1.PodRunning))
+					Eventually(func() string {
+						// TODO: rewrite me in a way that I can understand the output
+						return utils.GetPodState(listPods(odinLRP.LRPIdentifier)[i])
+					}, timeout).Should(Equal(opi.RunningState))
 				}
 				statefulset := getStatefulSet(odinLRP)
 
