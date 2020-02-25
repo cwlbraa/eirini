@@ -2,6 +2,7 @@ package statefulsets_test
 
 import (
 	"fmt"
+	"time"
 
 	"code.cloudfoundry.org/eirini/integration/util"
 	. "code.cloudfoundry.org/eirini/k8s"
@@ -69,6 +70,7 @@ var _ = Describe("StatefulSet Manager", func() {
 
 		It("should create all associated pods", func() {
 			var podNames []string
+
 			Eventually(func() []string {
 				podNames = podNamesFromPods(listPods(odinLRP.LRPIdentifier))
 				return podNames
@@ -82,6 +84,9 @@ var _ = Describe("StatefulSet Manager", func() {
 					return getPodPhase(podIndex, odinLRP.LRPIdentifier)
 				}, timeout).Should(Equal(corev1.PodRunning))
 			}
+
+			statefulset := getStatefulSet(odinLRP)
+			Expect(statefulset.Status.ReadyReplicas).To(Equal(statefulset.Status.Replicas))
 		})
 
 		It("should create a pod disruption budget for the lrp", func() {
@@ -95,6 +100,7 @@ var _ = Describe("StatefulSet Manager", func() {
 			BeforeEach(func() {
 				odinLRP.TargetInstances = 1
 			})
+
 			It("should not create a pod disruption budget for the lrp", func() {
 				statefulset := getStatefulSet(odinLRP)
 				_, err := podDisruptionBudgets().Get(statefulset.Name, v1.GetOptions{})
@@ -184,6 +190,36 @@ var _ = Describe("StatefulSet Manager", func() {
 			It("should error", func() {
 				err := desirer.Desire(odinLRP)
 				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("When using a docker image that needs root access", func() {
+			BeforeEach(func() {
+				odinLRP.Image = "xanderstrike/web:astandke"
+				odinLRP.Health.Type = "http"
+				odinLRP.Health.Port = 8080
+			})
+
+			FIt("should start all the pods", func() {
+				var podNames []string
+
+				time.Sleep(30 * time.Second)
+				Eventually(func() []string {
+					podNames = podNamesFromPods(listPods(odinLRP.LRPIdentifier))
+					return podNames
+				}, timeout).Should(HaveLen(odinLRP.TargetInstances))
+
+				for i := 0; i < odinLRP.TargetInstances; i++ {
+					podIndex := i
+					Expect(podNames[podIndex]).To(ContainSubstring(odinLRP.GUID))
+
+					Eventually(func() corev1.PodPhase {
+						return getPodPhase(podIndex, odinLRP.LRPIdentifier)
+					}, timeout).Should(Equal(corev1.PodRunning))
+				}
+				statefulset := getStatefulSet(odinLRP)
+
+				Expect(statefulset.Status.ReadyReplicas).To(Equal(statefulset.Status.Replicas))
 			})
 		})
 	})
