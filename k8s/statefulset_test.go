@@ -304,6 +304,11 @@ var _ = Describe("Statefulset Desirer", func() {
 				lrp.RunsAsRoot = true
 			})
 
+			It("does not set privileged context", func() {
+				statefulSet := statefulSetClient.CreateArgsForCall(0)
+				Expect(statefulSet.Spec.Template.Spec.SecurityContext).To(BeNil())
+			})
+
 			It("sets privileged service account", func() {
 				statefulSet := statefulSetClient.CreateArgsForCall(0)
 				Expect(statefulSet.Spec.Template.Spec.ServiceAccountName).To(Equal("supeirini"))

@@ -461,7 +461,6 @@ func (m *StatefulSetDesirer) toStatefulSet(lrp *opi.LRP) *appsv1.StatefulSet {
 	volumes, volumeMounts := getVolumeSpecs(lrp.VolumeMounts)
 	automountServiceAccountToken := false
 	allowPrivilegeEscalation := false
-	runAsNonRoot := true
 
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: meta.ObjectMeta{
@@ -500,11 +499,7 @@ func (m *StatefulSetDesirer) toStatefulSet(lrp *opi.LRP) *appsv1.StatefulSet {
 							VolumeMounts:   volumeMounts,
 						},
 					},
-					// FIXME
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsNonRoot: &runAsNonRoot,
-						RunAsUser:    int64ptr(VcapUID),
-					},
+					SecurityContext:    m.getGetSecurityContext(lrp),
 					ServiceAccountName: m.getAppServiceAccount(lrp),
 					Volumes:            volumes,
 				},
@@ -610,6 +605,17 @@ func (m *StatefulSetDesirer) labelSelector(lrp *opi.LRP) *metav1.LabelSelector {
 			LabelVersion:    lrp.Version,
 			LabelSourceType: appSourceType,
 		},
+	}
+}
+
+func (m *StatefulSetDesirer) getGetSecurityContext(lrp *opi.LRP) *corev1.PodSecurityContext {
+	if lrp.RunsAsRoot {
+		return nil
+	}
+	runAsNonRoot := true
+	return &corev1.PodSecurityContext{
+		RunAsNonRoot: &runAsNonRoot,
+		RunAsUser:    int64ptr(VcapUID),
 	}
 }
 

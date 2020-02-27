@@ -5,7 +5,6 @@ import (
 
 	"code.cloudfoundry.org/eirini/integration/util"
 	. "code.cloudfoundry.org/eirini/k8s"
-	"code.cloudfoundry.org/eirini/k8s/utils"
 	"code.cloudfoundry.org/eirini/opi"
 	"code.cloudfoundry.org/lager/lagertest"
 
@@ -82,7 +81,7 @@ var _ = Describe("StatefulSet Manager", func() {
 				podIndex := i
 				Expect(podNames[podIndex]).To(ContainSubstring(odinLRP.GUID))
 
-				Eventually(func() corev1.PodPhase {
+				Eventually(func() string {
 					return getPodPhase(podIndex, odinLRP.LRPIdentifier)
 				}, timeout).Should(Equal(corev1.PodRunning))
 			}
@@ -179,11 +178,10 @@ var _ = Describe("StatefulSet Manager", func() {
 					return listPods(odinLRP.LRPIdentifier)
 				}, timeout).Should(HaveLen(odinLRP.TargetInstances))
 
-				for i := 0; i < odinLRP.TargetInstances; i++ {
-					podIndex := i
-					Eventually(func() corev1.PodPhase {
+				for podIndex := 0; podIndex < odinLRP.TargetInstances; podIndex++ {
+					Eventually(func() string {
 						return getPodPhase(podIndex, odinLRP.LRPIdentifier)
-					}, timeout).Should(Equal(corev1.PodRunning))
+					}, timeout).Should(Equal("Ready"))
 				}
 			})
 		})
@@ -197,12 +195,14 @@ var _ = Describe("StatefulSet Manager", func() {
 
 		Context("When using a docker image that needs root access", func() {
 			BeforeEach(func() {
-				odinLRP.Image = "xanderstrike/web:astandke"
+				odinLRP.Image = "eirini/nginx-integration"
+				odinLRP.Command = nil
+				odinLRP.RunsAsRoot = true
 				odinLRP.Health.Type = "http"
 				odinLRP.Health.Port = 8080
 			})
 
-			FIt("should start all the pods", func() {
+			It("should start all the pods", func() {
 				var podNames []string
 
 				Eventually(func() []string {
@@ -210,14 +210,10 @@ var _ = Describe("StatefulSet Manager", func() {
 					return podNames
 				}, timeout).Should(HaveLen(odinLRP.TargetInstances))
 
-				for i := 0; i < odinLRP.TargetInstances; i++ {
-					podIndex := i
-					Expect(podNames[podIndex]).To(ContainSubstring(odinLRP.GUID))
-
+				for podIndex := 0; podIndex < odinLRP.TargetInstances; podIndex++ {
 					Eventually(func() string {
-						// TODO: rewrite me in a way that I can understand the output
-						return utils.GetPodState(listPods(odinLRP.LRPIdentifier)[i])
-					}, timeout).Should(Equal(opi.RunningState))
+						return getPodPhase(podIndex, odinLRP.LRPIdentifier)
+					}, timeout).Should(Equal("Ready"))
 				}
 				statefulset := getStatefulSet(odinLRP)
 
@@ -419,9 +415,27 @@ func int32ptr(i int) *int32 {
 	return &i32
 }
 
-func getPodPhase(index int, id opi.LRPIdentifier) corev1.PodPhase {
-	pods := listPods(id)
-	return pods[index].Status.Phase
+func getPodPhase(index int, id opi.LRPIdentifier) string {
+	pod := listPods(id)[index]
+	status := pod.Status
+	if status.Phase != corev1.PodRunning {
+		return fmt.Sprintf("Pod - %s", status.Phase)
+	}
+
+	if len(status.ContainerStatuses) == 0 {
+		return "Containers status unknown"
+	}
+
+	for _, containerStatus := range status.ContainerStatuses {
+		if containerStatus.State.Running == nil {
+			return fmt.Sprintf("Container %s - %v", containerStatus.Name, containerStatus.State)
+		}
+		if !containerStatus.Ready {
+			return fmt.Sprintf("Container %s is not Ready", containerStatus.Name)
+		}
+	}
+
+	return "Ready"
 }
 
 func privateRegistrySecretName(statefulsetName string) string {
