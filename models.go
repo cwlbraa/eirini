@@ -102,6 +102,10 @@ type MetricsCollectorConfig struct {
 	KubeConfig `yaml:",inline"`
 }
 
+type StagingReporterConfig struct {
+	KubeConfig `yaml:",inline"`
+}
+
 //go:generate counterfeiter . Stager
 type Stager interface {
 	Stage(string, cf.StagingRequest) error

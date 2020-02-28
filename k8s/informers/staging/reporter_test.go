@@ -22,51 +22,81 @@ var _ = Describe("CCFailedStagingReporter", func() {
 	)
 
 	BeforeEach(func() {
+		server = ghttp.NewServer()
+
+		/*
+			handlers := []http.HandlerFunc{
+				ghttp.VerifyJSON(`{
+					"task_guid": "the-stage-guid",
+					"failed": true,
+					"failure_reason": "fix this to be more descriptive",
+					"result": "",
+					"annotation": "{\"completion_callback\": \"internal_cc_staging_endpoint.io/stage/build_completed\"}"
+				}`),
+			}
+		*/
+
+		//		server.RouteToHandler("PUT", "/stage/the-stage-guid/completed", ghttp.CombineHandlers(handlers...))
+
 		reporter = staging.CCFailedStagingReporter{
 			Client: http.Client{},
 		}
-		server = ghttp.NewServer()
-
-		handlers := []http.HandlerFunc{
-			ghttp.VerifyJSON(`{
-				"task_guid": "the-stage-guid",
-				"failed": true,
-				"failure_reason": "fix this to be more descriptive",
-				"result": "",
-				"annotation": "{\"completion_callback\": \"internal_cc_staging_endpoint.io/stage/build_completed\"}"
-			}`),
-		}
-
-		server.RouteToHandler("PUT", "/stage/the-stage-guid/completed", ghttp.CombineHandlers(handlers...))
-
 	})
 
-	It("should report the correct failure to CC", func() {
-		failedPod := &v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "i'm not feeling well",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					k8s.LabelStagingGUID: "the-stage-guid",
+	AfterEach(func() {
+		server.Close()
+	})
+
+	Describe("Reporting status to Eirini", func() {
+
+		var (
+			thePod *v1.Pod
+		)
+
+		BeforeEach(func() {
+			thePod = &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "i'm not feeling well",
+					Annotations: map[string]string{},
+					Labels: map[string]string{
+						k8s.LabelStagingGUID: "the-stage-guid",
+					},
 				},
-			},
-			Spec: v1.PodSpec{
-				Containers: []v1.Container{
-					{
-						Env: []v1.EnvVar{
-							{
-								Name:  "COMPLETION_CALLBACK",
-								Value: "internal_cc_staging_endpoint.io/stage/build_completed",
-							},
-							{
-								Name:  "EIRINI_ADDRESS",
-								Value: server.URL(),
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Env: []v1.EnvVar{
+								{
+									Name:  "COMPLETION_CALLBACK",
+									Value: "internal_cc_staging_endpoint.io/stage/build_completed",
+								},
+								{
+									Name:  "EIRINI_ADDRESS",
+									Value: server.URL(),
+								},
 							},
 						},
 					},
 				},
-			},
-			Status: v1.PodStatus{
+			}
+
+		})
+
+		It("should report the correct failure to CC", func() {
+			server.AppendHandlers(
+				ghttp.CombineHandlers(
+					ghttp.VerifyRequest("PUT", "/stage/the-stage-guid/completed"),
+					ghttp.VerifyJSON(`{
+  					"task_guid": "the-stage-guid",
+  					"failed": true,
+  					"failure_reason": "ErrImagePull",
+  					"result": "",
+  					"annotation": "{\"lifecycle\":\"\",\"completion_callback\":\"internal_cc_staging_endpoint.io/stage/build_completed\"}",
+  					"created_at": 0
+  				}`),
+				))
+
+			thePod.Status = v1.PodStatus{
 				ContainerStatuses: []v1.ContainerStatus{
 					{
 						State: v1.ContainerState{
@@ -76,14 +106,31 @@ var _ = Describe("CCFailedStagingReporter", func() {
 						},
 					},
 				},
-			},
-		}
+			}
+			reporter.Report(thePod)
+			Expect(server.ReceivedRequests()).To(HaveLen(1))
+		})
 
-		reporter.Report(failedPod)
-		Expect(server.ReceivedRequests()).To(HaveLen(1))
-	})
+		It("should silently ignore happy Pods", func() {
+			thePod.Status = v1.PodStatus{
+				ContainerStatuses: []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{
+								Reason: "PodInitializing",
+							},
+						},
+					},
+				},
+			}
+			reporter.Report(thePod)
+			Expect(server.ReceivedRequests()).To(HaveLen(0))
+		})
 
-	XContext("When pod init container cannot start", func() {
+		/*
+			XContext("When pod init container cannot start", func() {
+			})
+		*/
 	})
 
 })

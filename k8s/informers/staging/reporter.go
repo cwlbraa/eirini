@@ -14,16 +14,22 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+const PodInitializing = "PodInitializing"
+
 type CCFailedStagingReporter struct {
 	Client http.Client
 }
 
 func (r CCFailedStagingReporter) Report(pod *v1.Pod) error {
 	stagingGUID := pod.Labels[k8s.LabelStagingGUID]
-	//if podIsWaitingForAnythingElseButPodInitializing:
+	status := getFailedContainerStatusIfAny(pod.Status.ContainerStatuses)
+	if status == nil {
+		return nil
+	}
+	reason := status.State.Waiting.Reason
 	completionCallback, _ := getEnvVarValue("COMPLETION_CALLBACK", pod.Spec.Containers[0].Env)
 	eiriniAddr, _ := getEnvVarValue("EIRINI_ADDRESS", pod.Spec.Containers[0].Env)
-	response := r.createFailureResponse("", stagingGUID, completionCallback)
+	response := r.createFailureResponse(reason, stagingGUID, completionCallback)
 	r.sendResponse(eiriniAddr, response)
 	return nil
 }
@@ -34,8 +40,17 @@ func getEnvVarValue(key string, vars []v1.EnvVar) (string, error) {
 			return envVar.Value, nil
 		}
 	}
-
 	return "", errors.New("failed to find env var")
+}
+
+func getFailedContainerStatusIfAny(statuses []v1.ContainerStatus) *v1.ContainerStatus {
+	for _, status := range statuses {
+		waiting := status.State.Waiting
+		if waiting != nil && waiting.Reason != PodInitializing {
+			return &status
+		}
+	}
+	return nil
 }
 
 func (r CCFailedStagingReporter) createFailureResponse(failure string, stagingGUID, completionCallback string) *models.TaskCallbackResponse {
