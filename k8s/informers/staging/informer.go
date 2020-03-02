@@ -21,6 +21,7 @@ type StagingInformer struct {
 	clientset   kubernetes.Interface
 	syncPeriod  time.Duration
 	namespace   string
+	reporter    StagingReporter
 	stopperChan chan struct{}
 	logger      lager.Logger
 }
@@ -29,6 +30,7 @@ func NewInformer(
 	client kubernetes.Interface,
 	syncPeriod time.Duration,
 	namespace string,
+	reporter StagingReporter,
 	stopperChan chan struct{},
 	logger lager.Logger,
 ) *StagingInformer {
@@ -36,6 +38,7 @@ func NewInformer(
 		clientset:   client,
 		syncPeriod:  syncPeriod,
 		namespace:   namespace,
+		reporter:    reporter,
 		stopperChan: stopperChan,
 		logger:      logger,
 	}
@@ -60,6 +63,7 @@ func (c *StagingInformer) Start() {
 func (c *StagingInformer) updateFunc(_ interface{}, newObj interface{}) {
 	pod := newObj.(*v1.Pod)
 	fmt.Println("Pod name is:", pod.Name)
+	c.reporter.Report(pod)
 }
 
 func tweakListOpts(opts *metav1.ListOptions) {

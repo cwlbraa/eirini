@@ -14,7 +14,7 @@ import (
 	. "code.cloudfoundry.org/eirini/k8s/informers/staging"
 )
 
-var _ = Describe("CCFailedStagingReporter", func() {
+var _ = Describe("FailedStagingReporter", func() {
 
 	var (
 		reporter StagingReporter
@@ -24,22 +24,8 @@ var _ = Describe("CCFailedStagingReporter", func() {
 	BeforeEach(func() {
 		server = ghttp.NewServer()
 
-		/*
-			handlers := []http.HandlerFunc{
-				ghttp.VerifyJSON(`{
-					"task_guid": "the-stage-guid",
-					"failed": true,
-					"failure_reason": "fix this to be more descriptive",
-					"result": "",
-					"annotation": "{\"completion_callback\": \"internal_cc_staging_endpoint.io/stage/build_completed\"}"
-				}`),
-			}
-		*/
-
-		//		server.RouteToHandler("PUT", "/stage/the-stage-guid/completed", ghttp.CombineHandlers(handlers...))
-
-		reporter = staging.CCFailedStagingReporter{
-			Client: http.Client{},
+		reporter = staging.FailedStagingReporter{
+			Client: &http.Client{},
 		}
 	})
 
@@ -50,7 +36,8 @@ var _ = Describe("CCFailedStagingReporter", func() {
 	Describe("Reporting status to Eirini", func() {
 
 		var (
-			thePod *v1.Pod
+			thePod                 *v1.Pod
+			statusFailed, statusOK v1.ContainerStatus
 		)
 
 		BeforeEach(func() {
@@ -77,54 +64,73 @@ var _ = Describe("CCFailedStagingReporter", func() {
 							},
 						},
 					},
+					InitContainers: []v1.Container{},
 				},
 			}
 
-		})
+			statusFailed = v1.ContainerStatus{
+				Name: "failing-container",
+				State: v1.ContainerState{
+					Waiting: &v1.ContainerStateWaiting{
+						Reason: "ErrImagePull",
+					},
+				},
+			}
 
-		It("should report the correct failure to CC", func() {
+			statusOK = v1.ContainerStatus{
+				Name: "starting-container",
+				State: v1.ContainerState{
+					Waiting: &v1.ContainerStateWaiting{
+						Reason: "PodInitializing",
+					},
+				},
+			}
 			server.AppendHandlers(
 				ghttp.CombineHandlers(
 					ghttp.VerifyRequest("PUT", "/stage/the-stage-guid/completed"),
 					ghttp.VerifyJSON(`{
   					"task_guid": "the-stage-guid",
   					"failed": true,
-  					"failure_reason": "ErrImagePull",
+						"failure_reason": "Container failing-container failed: ErrImagePull",
   					"result": "",
   					"annotation": "{\"lifecycle\":\"\",\"completion_callback\":\"internal_cc_staging_endpoint.io/stage/build_completed\"}",
   					"created_at": 0
   				}`),
 				))
 
+		})
+
+		It("should report the correct container failure reason to Eirini", func() {
 			thePod.Status = v1.PodStatus{
 				ContainerStatuses: []v1.ContainerStatus{
-					{
-						State: v1.ContainerState{
-							Waiting: &v1.ContainerStateWaiting{
-								Reason: "ErrImagePull",
-							},
-						},
-					},
+					statusFailed,
 				},
 			}
 			reporter.Report(thePod)
 			Expect(server.ReceivedRequests()).To(HaveLen(1))
 		})
 
-		It("should silently ignore happy Pods", func() {
+		It("should silently ignore happy containers", func() {
 			thePod.Status = v1.PodStatus{
 				ContainerStatuses: []v1.ContainerStatus{
-					{
-						State: v1.ContainerState{
-							Waiting: &v1.ContainerStateWaiting{
-								Reason: "PodInitializing",
-							},
-						},
-					},
+					statusOK,
 				},
 			}
 			reporter.Report(thePod)
 			Expect(server.ReceivedRequests()).To(HaveLen(0))
+		})
+
+		It("should detect failing InitContainers", func() {
+			thePod.Status = v1.PodStatus{
+				ContainerStatuses: []v1.ContainerStatus{
+					statusOK,
+				},
+				InitContainerStatuses: []v1.ContainerStatus{
+					statusFailed,
+				},
+			}
+			reporter.Report(thePod)
+			Expect(server.ReceivedRequests()).To(HaveLen(1))
 		})
 
 		/*

@@ -16,19 +16,24 @@ import (
 
 const PodInitializing = "PodInitializing"
 
-type CCFailedStagingReporter struct {
-	Client http.Client
+type FailedStagingReporter struct {
+	Client *http.Client
 }
 
-func (r CCFailedStagingReporter) Report(pod *v1.Pod) error {
+func (r FailedStagingReporter) Report(pod *v1.Pod) error {
 	stagingGUID := pod.Labels[k8s.LabelStagingGUID]
-	status := getFailedContainerStatusIfAny(pod.Status.ContainerStatuses)
+
+	status := getFailedContainerStatusIfAny(append(
+		pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses...,
+	))
 	if status == nil {
 		return nil
 	}
-	reason := status.State.Waiting.Reason
 	completionCallback, _ := getEnvVarValue("COMPLETION_CALLBACK", pod.Spec.Containers[0].Env)
 	eiriniAddr, _ := getEnvVarValue("EIRINI_ADDRESS", pod.Spec.Containers[0].Env)
+
+	// add container name from status.Name
+	reason := fmt.Sprintf("Container %s failed: %s", status.Name, status.State.Waiting.Reason)
 	response := r.createFailureResponse(reason, stagingGUID, completionCallback)
 	r.sendResponse(eiriniAddr, response)
 	return nil
@@ -53,13 +58,14 @@ func getFailedContainerStatusIfAny(statuses []v1.ContainerStatus) *v1.ContainerS
 	return nil
 }
 
-func (r CCFailedStagingReporter) createFailureResponse(failure string, stagingGUID, completionCallback string) *models.TaskCallbackResponse {
+func (r FailedStagingReporter) createFailureResponse(failure string, stagingGUID, completionCallback string) *models.TaskCallbackResponse {
 	annotation := cc_messages.StagingTaskAnnotation{
 		CompletionCallback: completionCallback,
 	}
 
 	annotationJSON, err := json.Marshal(annotation)
 	if err != nil {
+		//FIXME just log error and return nil
 		panic(err)
 	}
 
@@ -71,9 +77,10 @@ func (r CCFailedStagingReporter) createFailureResponse(failure string, stagingGU
 	}
 }
 
-func (r CCFailedStagingReporter) sendResponse(eiriniAddr string, response *models.TaskCallbackResponse) error {
+func (r FailedStagingReporter) sendResponse(eiriniAddr string, response *models.TaskCallbackResponse) error {
 	responseJSON, err := json.Marshal(response)
 	if err != nil {
+		//FIXME just log error and return nil
 		panic(err)
 	}
 
