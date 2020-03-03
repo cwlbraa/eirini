@@ -14,7 +14,7 @@ import (
 )
 
 type StagingReporter interface {
-	Report(*v1.Pod) error
+	Report(*v1.Pod)
 }
 
 type StagingInformer struct {

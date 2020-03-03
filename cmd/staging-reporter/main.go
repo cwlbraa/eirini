@@ -56,6 +56,7 @@ func launchStagingReporter(clientset kubernetes.Interface, ca, eiriniCert, eirin
 	stagingLogger.RegisterSink(lager.NewPrettySink(os.Stdout, lager.DEBUG))
 	reporter := staging.FailedStagingReporter{
 		Client: httpClient,
+		Logger: stagingLogger,
 	}
 	stagingInformer := staging.NewInformer(clientset, 0, namespace, reporter, make(chan struct{}), stagingLogger)
 

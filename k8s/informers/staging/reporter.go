@@ -9,6 +9,7 @@ import (
 
 	"code.cloudfoundry.org/bbs/models"
 	"code.cloudfoundry.org/eirini/k8s"
+	"code.cloudfoundry.org/lager"
 	"code.cloudfoundry.org/runtimeschema/cc_messages"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -18,25 +19,32 @@ const PodInitializing = "PodInitializing"
 
 type FailedStagingReporter struct {
 	Client *http.Client
+	Logger lager.Logger
 }
 
-func (r FailedStagingReporter) Report(pod *v1.Pod) error {
+func (r FailedStagingReporter) Report(pod *v1.Pod) {
 	stagingGUID := pod.Labels[k8s.LabelStagingGUID]
 
 	status := getFailedContainerStatusIfAny(append(
 		pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses...,
 	))
 	if status == nil {
-		return nil
+		return
 	}
 	completionCallback, _ := getEnvVarValue("COMPLETION_CALLBACK", pod.Spec.Containers[0].Env)
 	eiriniAddr, _ := getEnvVarValue("EIRINI_ADDRESS", pod.Spec.Containers[0].Env)
 
-	// add container name from status.Name
-	reason := fmt.Sprintf("Container %s failed: %s", status.Name, status.State.Waiting.Reason)
+	reason := fmt.Sprintf("Container '%s' in Pod '%s' failed: %s",
+		status.Name,
+		pod.Name,
+		status.State.Waiting.Reason,
+	)
+	r.Logger.Error("staging pod failed", errors.New(reason))
 	response := r.createFailureResponse(reason, stagingGUID, completionCallback)
-	r.sendResponse(eiriniAddr, response)
-	return nil
+	if response != nil {
+		r.sendResponse(eiriniAddr, response)
+	}
+	return
 }
 
 func getEnvVarValue(key string, vars []v1.EnvVar) (string, error) {
@@ -65,8 +73,8 @@ func (r FailedStagingReporter) createFailureResponse(failure string, stagingGUID
 
 	annotationJSON, err := json.Marshal(annotation)
 	if err != nil {
-		//FIXME just log error and return nil
-		panic(err)
+		r.Logger.Error("cannot create callback annotation", err)
+		return nil
 	}
 
 	return &models.TaskCallbackResponse{
@@ -80,8 +88,8 @@ func (r FailedStagingReporter) createFailureResponse(failure string, stagingGUID
 func (r FailedStagingReporter) sendResponse(eiriniAddr string, response *models.TaskCallbackResponse) error {
 	responseJSON, err := json.Marshal(response)
 	if err != nil {
-		//FIXME just log error and return nil
-		panic(err)
+		r.Logger.Error("cannot create failed staging response", err)
+		return nil
 	}
 
 	uri := fmt.Sprintf("%s/stage/%s/completed", eiriniAddr, response.TaskGuid)
