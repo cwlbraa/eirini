@@ -83,7 +83,7 @@ var _ = Describe("StatefulSet Manager", func() {
 
 				Eventually(func() string {
 					return getPodPhase(podIndex, odinLRP.LRPIdentifier)
-				}, timeout).Should(Equal(corev1.PodRunning))
+				}, timeout).Should(Equal("Ready"))
 			}
 
 			statefulset := getStatefulSet(odinLRP)
@@ -159,6 +159,7 @@ var _ = Describe("StatefulSet Manager", func() {
 		Context("When private docker registry credentials are provided", func() {
 			BeforeEach(func() {
 				odinLRP.Image = "eiriniuser/notdora:latest"
+				odinLRP.Command = nil
 				odinLRP.PrivateRegistry = &opi.PrivateRegistry{
 					Server:   "index.docker.io/v1/",
 					Username: "eiriniuser",
