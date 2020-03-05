@@ -94,10 +94,33 @@ func initStagingCompleter(cfg *eirini.Config, logger lager.Logger) stager.Stagin
 }
 
 func initBuildpackStager(clientset kubernetes.Interface, cfg *eirini.Config, stagingCompleter stager.StagingCompleter, logger lager.Logger) eirini.Stager {
+	tlsConfigs := []k8s.StagingConfigTLS{
+		{
+			SecretName: cfg.Properties.CCUploaderSecretName,
+			KeyPaths: []k8s.KeyPath{
+				{Key: cfg.Properties.CCUploaderKeyPath, Path: "cc-server-crt-key"},
+				{Key: cfg.Properties.CCUploaderCertPath, Path: "cc-server-crt"},
+			},
+		},
+		{
+			SecretName: cfg.Properties.ClientCertsSecretName,
+			KeyPaths: []k8s.KeyPath{
+				{Key: cfg.Properties.ClientCertPath, Path: "eirini-client-crt"},
+				{Key: cfg.Properties.ClientKeyPath, Path: "eirini-client-crt-key"},
+			},
+		},
+		{
+			SecretName: cfg.Properties.CACertSecretName,
+			KeyPaths: []k8s.KeyPath{
+				{Key: cfg.Properties.CACertPath, Path: "internal-ca-cert"},
+			},
+		},
+	}
+
 	taskDesirer := &k8s.TaskDesirer{
-		Namespace:       cfg.Properties.Namespace,
-		CertsSecretName: cfg.Properties.CCCertsSecretName,
-		JobClient:       clientset.BatchV1().Jobs(cfg.Properties.Namespace),
+		Namespace: cfg.Properties.Namespace,
+		TLSConfig: tlsConfigs,
+		JobClient: clientset.BatchV1().Jobs(cfg.Properties.Namespace),
 	}
 
 	stagerCfg := eirini.StagerConfig{
